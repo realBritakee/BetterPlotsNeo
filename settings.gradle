@@ -1,0 +1,13 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+// NOTE: The `reference/` folder is intentionally NOT included here.
+// PlotSquared-main and WorldEdit-version-7.4.x are read-only reference sources — never compiled.
+rootProject.name = "BetterPlotsNeo-1.21.1"

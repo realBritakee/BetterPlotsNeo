@@ -1,0 +1,12 @@
+{
+  "type": "betterplots:plot_dimension_type",
+  "generator": {
+    "type": "betterplots:plot_generator",
+    "plot_size": 64,
+    "road_width": 7,
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "minecraft:plains"
+    }
+  }
+}

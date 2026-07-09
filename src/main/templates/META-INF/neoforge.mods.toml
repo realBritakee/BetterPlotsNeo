@@ -1,0 +1,47 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="Britakee — Britakee Studios"
+# IGNORE_ALL_VERSION: vanilla clients can join (server-side mod).
+# Client features (border rendering, GUI) will be added later; change this when needed.
+displayTest="IGNORE_ALL_VERSION"
+description='''
+BetterPlotsNeo is a NeoForge 1.21.1 server-side plot management mod.
+Recreates PlotSquared's core feature set natively on NeoForge using Minecraft
+dimensions as plot worlds — no Bukkit required.
+
+Features (in development):
+- Pre-registered pool of plot dimensions (betterplots:plots_0 .. plots_N)
+- Custom PlotChunkGenerator with a classic grid of claimable parcels
+- Plot claim, trust, flags, protection, and commands
+- HikariCP + SQLite persistence
+'''
+
+[[mixins]]
+config="${mod_id}.mixins.json"
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="luckperms"
+    type="optional"
+    versionRange="[5,)"
+    ordering="NONE"
+    side="SERVER"
