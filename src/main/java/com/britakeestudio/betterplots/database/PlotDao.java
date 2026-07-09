@@ -11,6 +11,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -153,6 +154,51 @@ public class PlotDao {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    public static void deletePlot(Plot plot) {
+        Integer dbId = getPlotDbId(plot);
+        if (dbId == null) return;
+        
+        // This will cascade delete plot_trusted due to ON DELETE CASCADE
+        String sql = "DELETE FROM plots WHERE id = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, dbId);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static List<Plot> getPlotsByOwner(UUID owner) {
+        List<Plot> ownedPlots = new ArrayList<>();
+        List<PlotArea> areas = loadAllPlotAreas();
+        String sql = "SELECT area_id, plot_x, plot_z FROM plots WHERE owner_uuid = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, owner.toString());
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    int areaId = rs.getInt("area_id");
+                    PlotArea area = areas.stream().filter(a -> {
+                        Integer id = getAreaId(a);
+                        return id != null && id == areaId;
+                    }).findFirst().orElse(null);
+                    
+                    if (area != null) {
+                        PlotId id = PlotId.of(rs.getInt("plot_x"), rs.getInt("plot_z"));
+                        Plot p = loadPlot(area, id);
+                        if (p != null) {
+                            ownedPlots.add(p);
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return ownedPlots;
     }
 
     private static Integer getPlotDbId(Plot plot) {

@@ -21,7 +21,11 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import net.minecraft.world.level.chunk.ChunkGenerator;
 
+import net.minecraft.commands.arguments.GameProfileArgument;
+import com.mojang.authlib.GameProfile;
+import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 public class PlotCommandManager {
 
@@ -32,6 +36,19 @@ public class PlotCommandManager {
         LiteralArgumentBuilder<CommandSourceStack> basePlot = Commands.literal("plot")
                 .then(Commands.literal("claim").executes(PlotCommandManager::claimPlot))
                 .then(Commands.literal("auto").executes(PlotCommandManager::autoClaim))
+                .then(Commands.literal("info").executes(PlotCommandManager::plotInfo))
+                .then(Commands.literal("home").executes(PlotCommandManager::plotHome))
+                .then(Commands.literal("visit")
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .executes(PlotCommandManager::visitPlot)))
+                .then(Commands.literal("clear").executes(PlotCommandManager::clearPlot))
+                .then(Commands.literal("delete").executes(PlotCommandManager::deletePlot))
+                .then(Commands.literal("trust")
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .executes(PlotCommandManager::trustPlayer)))
+                .then(Commands.literal("remove")
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .executes(PlotCommandManager::removeTrusted)))
                 .then(Commands.literal("area")
                         .then(Commands.literal("create").requires(src -> src.hasPermission(2)).executes(PlotCommandManager::createArea)))
                 .then(Commands.literal("setup").requires(src -> src.hasPermission(2))
@@ -136,6 +153,197 @@ public class PlotCommandManager {
         player.teleportTo(player.serverLevel(), tpPos.getX(), tpPos.getY(), tpPos.getZ(), player.getYRot(), player.getXRot());
 
         source.sendSuccess(() -> Component.literal("§aSuccessfully claimed plot " + id + "!"), false);
+        return 1;
+    }
+
+    private static int trustPlayer(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        if (!source.isPlayer()) return 0;
+        ServerPlayer player = source.getPlayer();
+        
+        Plot plot = getCurrentPlot(player);
+        if (plot == null) {
+            source.sendFailure(Component.literal("§cYou are not standing in a claimed plot."));
+            return 0;
+        }
+        
+        if (!plot.getOwner().equals(player.getUUID())) {
+            source.sendFailure(Component.literal("§cOnly the plot owner can trust players."));
+            return 0;
+        }
+        
+        try {
+            Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(ctx, "player");
+            if (profiles.isEmpty()) {
+                source.sendFailure(Component.literal("§cPlayer not found."));
+                return 0;
+            }
+            GameProfile target = profiles.iterator().next();
+            
+            PlotDao.addTrusted(plot, target.getId());
+            source.sendSuccess(() -> Component.literal("§aAdded " + target.getName() + " as a trusted member."), false);
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("§cFailed to trust player."));
+        }
+        return 1;
+    }
+
+    private static int removeTrusted(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        if (!source.isPlayer()) return 0;
+        ServerPlayer player = source.getPlayer();
+        
+        Plot plot = getCurrentPlot(player);
+        if (plot == null) {
+            source.sendFailure(Component.literal("§cYou are not standing in a claimed plot."));
+            return 0;
+        }
+        
+        if (!plot.getOwner().equals(player.getUUID())) {
+            source.sendFailure(Component.literal("§cOnly the plot owner can remove trusted players."));
+            return 0;
+        }
+        
+        try {
+            Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(ctx, "player");
+            if (profiles.isEmpty()) {
+                source.sendFailure(Component.literal("§cPlayer not found."));
+                return 0;
+            }
+            GameProfile target = profiles.iterator().next();
+            
+            PlotDao.removeTrusted(plot, target.getId());
+            source.sendSuccess(() -> Component.literal("§aRemoved " + target.getName() + " from trusted members."), false);
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("§cFailed to remove trusted player."));
+        }
+        return 1;
+    }
+
+    private static int plotInfo(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        if (!source.isPlayer()) return 0;
+        ServerPlayer player = source.getPlayer();
+        
+        Plot plot = getCurrentPlot(player);
+        if (plot == null) {
+            source.sendFailure(Component.literal("§cYou are not standing in a claimed plot."));
+            return 0;
+        }
+        
+        source.sendSuccess(() -> Component.literal("§b=== Plot Info ==="), false);
+        source.sendSuccess(() -> Component.literal("§7ID: §f" + plot.getId()), false);
+        
+        // Very basic resolution (UUID might not resolve instantly in singleplayer for offline players)
+        // For production, we'd use a Username cache
+        source.sendSuccess(() -> Component.literal("§7Owner: §f" + plot.getOwner().toString().substring(0, 8)), false);
+        
+        if (!plot.getTrusted().isEmpty()) {
+            source.sendSuccess(() -> Component.literal("§7Trusted Members: §f" + plot.getTrusted().size()), false);
+        }
+        
+        return 1;
+    }
+
+    private static Plot getCurrentPlot(ServerPlayer player) {
+        List<PlotArea> areas = PlotDao.loadAllPlotAreas();
+        PlotArea currentArea = areas.stream()
+                .filter(a -> a.getDimension().equals(player.serverLevel().dimension()))
+                .findFirst()
+                .orElse(null);
+        if (currentArea == null) return null;
+        
+        PlotId id = PlotManager.getPlotId(currentArea, player.blockPosition());
+        if (id == null) return null;
+        
+        return PlotDao.loadPlot(currentArea, id);
+    }
+
+    private static int plotHome(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        if (!source.isPlayer()) return 0;
+        ServerPlayer player = source.getPlayer();
+        
+        List<Plot> plots = PlotDao.getPlotsByOwner(player.getUUID());
+        if (plots.isEmpty()) {
+            source.sendFailure(Component.literal("§cYou don't own any plots."));
+            return 0;
+        }
+        
+        Plot plot = plots.get(0);
+        BlockPos pos = PlotManager.getTeleportPos(plot.getArea(), plot.getId());
+        
+        player.teleportTo(player.serverLevel().getServer().getLevel(plot.getArea().getDimension()), pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot());
+        source.sendSuccess(() -> Component.literal("§aTeleported to your plot."), false);
+        return 1;
+    }
+
+    private static int visitPlot(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        if (!source.isPlayer()) return 0;
+        ServerPlayer player = source.getPlayer();
+        
+        try {
+            Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(ctx, "player");
+            if (profiles.isEmpty()) {
+                source.sendFailure(Component.literal("§cPlayer not found."));
+                return 0;
+            }
+            GameProfile target = profiles.iterator().next();
+            List<Plot> plots = PlotDao.getPlotsByOwner(target.getId());
+            if (plots.isEmpty()) {
+                source.sendFailure(Component.literal("§cThat player doesn't own any plots."));
+                return 0;
+            }
+            
+            Plot plot = plots.get(0);
+            BlockPos pos = PlotManager.getTeleportPos(plot.getArea(), plot.getId());
+            player.teleportTo(player.serverLevel().getServer().getLevel(plot.getArea().getDimension()), pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot());
+            source.sendSuccess(() -> Component.literal("§aTeleported to " + target.getName() + "'s plot."), false);
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("§cFailed to visit plot."));
+        }
+        return 1;
+    }
+
+    private static int clearPlot(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        if (!source.isPlayer()) return 0;
+        ServerPlayer player = source.getPlayer();
+        
+        Plot plot = getCurrentPlot(player);
+        if (plot == null) {
+            source.sendFailure(Component.literal("§cYou are not standing in a claimed plot."));
+            return 0;
+        }
+        if (!plot.getOwner().equals(player.getUUID())) {
+            source.sendFailure(Component.literal("§cOnly the plot owner can clear the plot."));
+            return 0;
+        }
+        
+        PlotManager.clearPlot(player.serverLevel(), plot.getArea(), plot.getId());
+        source.sendSuccess(() -> Component.literal("§aPlot cleared."), false);
+        return 1;
+    }
+
+    private static int deletePlot(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        if (!source.isPlayer()) return 0;
+        ServerPlayer player = source.getPlayer();
+        
+        Plot plot = getCurrentPlot(player);
+        if (plot == null) {
+            source.sendFailure(Component.literal("§cYou are not standing in a claimed plot."));
+            return 0;
+        }
+        if (!plot.getOwner().equals(player.getUUID())) {
+            source.sendFailure(Component.literal("§cOnly the plot owner can delete the plot."));
+            return 0;
+        }
+        
+        PlotManager.clearPlot(player.serverLevel(), plot.getArea(), plot.getId());
+        PlotDao.deletePlot(plot);
+        source.sendSuccess(() -> Component.literal("§aPlot completely deleted and unclaimed."), false);
         return 1;
     }
 

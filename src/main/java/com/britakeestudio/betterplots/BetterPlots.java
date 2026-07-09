@@ -14,6 +14,8 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.neoforge.server.permission.events.PermissionGatherEvent;
+import com.britakeestudio.betterplots.listeners.PlotProtectionListener;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import org.slf4j.Logger;
@@ -66,6 +68,10 @@ public class BetterPlots {
         NeoForge.EVENT_BUS.addListener(this::onServerStarting);
         NeoForge.EVENT_BUS.addListener(this::onServerStopping);
         NeoForge.EVENT_BUS.addListener(this::onRegisterCommands);
+        NeoForge.EVENT_BUS.addListener(this::onPermissionGather);
+        
+        // Register Event Listeners
+        NeoForge.EVENT_BUS.register(new PlotProtectionListener());
 
         LOGGER.info("[BetterPlotsNeo] Mod initializing — Milestone 1 (scaffold + dimension pool)");
     }
@@ -82,6 +88,14 @@ public class BetterPlots {
         DatabaseManager.init(server);
         PlotDao.loadAllPlotAreas();
         LOGGER.info("[BetterPlotsNeo] Database initialized and PlotAreas loaded.");
+        
+        // Register WorldEdit listener
+        try {
+            com.sk89q.worldedit.WorldEdit.getInstance().getEventBus().register(new com.britakeestudio.betterplots.listeners.WorldEditListener());
+            LOGGER.info("[BetterPlotsNeo] WorldEdit integration registered successfully.");
+        } catch (Throwable t) {
+            LOGGER.warn("[BetterPlotsNeo] WorldEdit not found or failed to register.", t);
+        }
     }
 
     private void onServerStopping(ServerStoppingEvent event) {
@@ -91,5 +105,9 @@ public class BetterPlots {
 
     private void onRegisterCommands(RegisterCommandsEvent event) {
         PlotCommandManager.register(event);
+    }
+    
+    private void onPermissionGather(PermissionGatherEvent.Nodes event) {
+        event.addNodes(PlotProtectionListener.BUILD_ROAD);
     }
 }

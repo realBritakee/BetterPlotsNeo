@@ -25,11 +25,6 @@ repositories {
         name = "LuckPerms"
         url = "https://oss.sonatype.org/content/repositories/snapshots/"
     }
-    // WorldEdit EngineHub repo
-    maven {
-        name = "EngineHub"
-        url = "https://maven.enginehub.org/repo/"
-    }
     // HikariCP + SQLite JDBC are on Maven Central (included by default)
 }
 
@@ -88,9 +83,8 @@ dependencies {
     // LuckPerms — optional permission backend (compileOnly, detected at runtime)
     compileOnly "net.luckperms:api:5.4"
 
-    // WorldEdit API
-    compileOnly "com.sk89q.worldedit:worldedit-core:7.3.8"
-    compileOnly "com.sk89q.worldedit:worldedit-neoforge:7.3.8"
+    // WorldEdit API (local mod jar to avoid transitive conflicts)
+    compileOnly files('../run/neoforge-1.21.1-21.1.235/mods/worldedit-mod-7.3.8.jar')
 
     // HikariCP — connection pooling for the DB layer (Milestone 4+)
     implementation "com.zaxxer:HikariCP:5.1.0"
